@@ -19,7 +19,7 @@ def rds_exe_statement(exe_sql, param = [],tran_id = ""):
     return rds_response
 
 # GET
-def get_proc(event):
+def get_method(event):
     queryParam = event.get('queryStringParameters') # クエリパラメータ取得
     print(queryParam) # デバッグ用
     exe_statement_response = ""
@@ -43,7 +43,7 @@ def get_proc(event):
 
 def lambda_handler(event, context):
     # POST
-    def post_proc():
+    def post_method():
         body = event.get('body') # 更新パラメータ取得
         if body == None:
             raise # "パラメータがないならばエラー"
@@ -102,7 +102,7 @@ def lambda_handler(event, context):
         return message
 
 
-    def patch_proc():
+    def patch_method():
         message = ""
         body = event.get('body') # 更新パラメータ取得
 
@@ -174,7 +174,7 @@ def lambda_handler(event, context):
 
 
     # delete
-    def delete_proc():
+    def delete_method():
         message = ""
         body = event.get('body') # 更新パラメータ取得
 
@@ -272,10 +272,10 @@ def lambda_handler(event, context):
         return True
 
     http_method_map = {
-        'GET'  : get_proc,
-        'POST' : post_proc,
-        'PATCH': patch_proc,
-        'DELETE': delete_proc
+        'GET'  : get_method,
+        'POST' : post_method,
+        'PATCH': patch_method,
+        'DELETE': delete_method
     }
 
 
