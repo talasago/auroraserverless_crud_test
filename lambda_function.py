@@ -1,53 +1,47 @@
 import json
 import boto3
 
+rdsData = boto3.client('rds-data')
+cluster_arn = 'arn:aws:rds:ap-northeast-1:398086303497:cluster:meigen-share-db'
+secret_arn = 'arn:aws:secretsmanager:ap-northeast-1:398086303497:secret:rds-db-credentials/cluster-WTXA7NF2XW2GIZC6UHOO2GAE3A/admin-nstzA9'
+database_name = 'meigen'
+
+# AuroraServerlessへのsql実行メソッド
+def rds_exe_statement(exe_sql, param = [],tran_id = ""):
+    rds_response = rdsData.execute_statement(
+                    resourceArn = cluster_arn,
+                    secretArn = secret_arn,
+                    database = database_name,
+                    sql = exe_sql,
+                    parameters = param,
+                    transactionId = tran_id)
+    print() # パラメータのデバッグ
+    return rds_response
+
+# GET
+def get_proc(event):
+    queryParam = event.get('queryStringParameters') # クエリパラメータ取得
+    print(queryParam) # デバッグ用
+    exe_statement_response = ""
+
+    # クエリパラメータがない場合、クエリパラメータ(id)がない場合
+    if queryParam == None or queryParam.get('id') == None:
+        sql =  "select * from FamousQoute"
+        exe_statement_response = rds_exe_statement(exe_sql = sql)
+    # クエリパラメータ(id)がある場合
+    else:
+        try:
+            id = int(queryParam.get('id'))
+        except:
+            raise TypeError('id is type error')
+        sql =  "select * from FamousQoute where id = :id"
+        param = [{'name': 'id', 'value': { 'longValue': id }}]
+        exe_statement_response = rds_exe_statement(exe_sql = sql, param = param)
+
+    message = exe_statement_response['records']
+    return message
+
 def lambda_handler(event, context):
-    rdsData = boto3.client('rds-data')
-
-    cluster_arn = 'arn:aws:rds:ap-northeast-1:398086303497:cluster:meigen-share-db'
-    secret_arn = 'arn:aws:secretsmanager:ap-northeast-1:398086303497:secret:rds-db-credentials/cluster-WTXA7NF2XW2GIZC6UHOO2GAE3A/admin-nstzA9'
-    database_name = 'meigen'
-
-    # GET
-    def get_proc():
-        queryParam = event.get('queryStringParameters') # クエリパラメータ取得
-        print(queryParam)
-
-        message = ""
-        if queryParam == None:
-            rds_response = rdsData.execute_statement(
-                            resourceArn = cluster_arn,
-                            secretArn = secret_arn,
-                            database = database_name,
-                            sql = "select * from FamousQoute")
-            message = rds_response['records']
-
-        elif queryParam.get('id') != None:
-            try:
-                id = int(queryParam.get('id'))
-            except:
-                raise  TypeError('id is type error')
-
-            rds_response = rdsData.execute_statement(
-                            resourceArn = cluster_arn,
-                            secretArn = secret_arn,
-                            database = database_name,
-                            sql = "select * from FamousQoute where id = :id",
-                            parameters = [
-                                {'name': 'id', 'value': { 'longValue': id }}
-                            ]
-                            )
-            message = rds_response['records']
-
-        else:
-            rds_response = rdsData.execute_statement(
-                            resourceArn = cluster_arn,
-                            secretArn = secret_arn,
-                            database = database_name,
-                            sql = "select * from FamousQoute")
-            message = rds_response['records']
-        return message
-
     # POST
     def post_proc():
         body = event.get('body') # 更新パラメータ取得
@@ -286,10 +280,8 @@ def lambda_handler(event, context):
 
 
     res_message = ""
-    res_message = http_method_map[httpMethod]()
-
     try:
-        res_message = http_method_map[httpMethod]()
+        res_message = http_method_map[httpMethod](event)
     except KeyError as e:
         raise ValueError('Invalid printer: {}'.format(httpMethod))
 
