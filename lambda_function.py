@@ -9,15 +9,13 @@ schema_name   = 'meigen'
 
 # AuroraServerlessへのsql実行メソッド
 def rds_exe_statement(exe_sql, param = [],tran_id = ""):
-    rds_response = rdsData.execute_statement(
+    return rdsData.execute_statement(
                     resourceArn = cluster_arn,
                     secretArn = secret_arn,
                     database = database_name,
                     sql = exe_sql,
                     parameters = param,
                     transactionId = tran_id)
-    print() # パラメータのデバッグ
-    return rds_response
 
 def rds_begin_transaction():
     return rdsData.begin_transaction(
@@ -34,7 +32,6 @@ def rds_commit_transaction(tran_id):
                         secretArn = secret_arn,
                         )
 
-# GET
 def get_method(event):
     queryParam = event.get('queryStringParameters') # クエリパラメータ取得
     print(queryParam) # デバッグ用
@@ -57,7 +54,6 @@ def get_method(event):
     message = exe_statement_response['records']
     return message
 
-# POST
 def post_method(event):
     body = event.get('body') # 更新パラメータ取得
     if body == None:
@@ -151,99 +147,67 @@ def patch_method(event):
     print(commit_result)  # debug
     print(exe_statement_response)  # debug
 
-    message = exe_statement_response['numberOfRecordsUpdated'] #更新件数を返却
+    message = f"update record number is {exe_statement_response['numberOfRecordsUpdated']} " #更新件数を返却
 
     return message
 
+def delete_method(event):
+    body = event.get('body') # 更新パラメータ取得
+    if body == None:
+         raise # "パラメータがないならばエラー"
+
+    body_load = json.loads(body)
+    if body_load == None:
+        raise # "パラメータがないならばエラー"
+    if not 'id' in body_load or not 'user_id' in body_load:
+        raise # "パラメータがないならばエラー"
+
+    id = ""
+    user_id = ""
+    try:
+        id      = int(body_load['id'])
+        user_id = int(body_load['user_id'])
+    except:
+        raise TypeError('param type error')
+
+    rds_transaction_info = rds_begin_transaction()
+    transaction_id = rds_transaction_info['transactionId']
+
+    # 元々データがない場合もエラーとならないけどめんどくさいので実装しない
+    del_sql = "delete from FamousQoute where id = :id and user_id = :user_id"
+    param = [{'name': 'id', 'value': { 'longValue': id }},
+             {'name': 'user_id', 'value': { 'longValue': user_id }},
+    ]
+    del_exe_statement_response = rds_exe_statement(exe_sql = del_sql,
+                                                   param = param,
+                                                   tran_id = transaction_id)
+
+    # 削除されたかわからないのでSELECT
+    sel_sql = "select * from FamousQoute where id = :id and user_id = :user_id"
+    sel_exe_statement_responce = rds_exe_statement(exe_sql = sel_sql,
+                                                   param = param,
+                                                   tran_id = transaction_id)
+
+    # 0件以外の場合はエラー
+    if len(sel_exe_statement_responce['records']) != 0:
+        #TODO:ロールバック処理
+        raise
+
+    commit_result = rds_commit_transaction(tran_id = transaction_id)
+
+    print (f"transaction_id:{rds_transaction_info['transactionId']}") # debug
+    print(commit_result) # debug
+
+    if commit_result['transactionStatus'] != 'Transaction Committed':
+        #TODO:ロールバック処理
+        raise
+
+    message = f'id:{id} of user_id:{user_id} is deleted' # 削除したキーを表示。
+
+    return message
+
+
 def lambda_handler(event, context):
-
-    # delete
-    def delete_method():
-        message = ""
-        body = event.get('body') # 更新パラメータ取得
-
-        if body == None:
-             raise # "パラメータがないならばエラー"
-
-        body_load = json.loads(body)
-        print(body_load)
-
-        if body_load == None:
-            raise # "パラメータがないならばエラー"
-        if not 'id' in body_load or not 'user_id' in body_load:
-            raise # "パラメータがないならばエラー"
-
-        id = ""
-        user_id = ""
-        content = ""
-        try:
-            id      = body_load['id']
-            user_id = body_load['user_id']
-        except:
-            raise TypeError('param type error')
-
-        res_transaction = rdsData.begin_transaction(
-                            database = 'meigen',
-                            resourceArn = cluster_arn,
-                            schema = 'meigen',
-                            secretArn = secret_arn,
-                            )
-        transaction_id = res_transaction['transactionId']
-
-
-        # 元々データがない場合もエラーとならないけどめんどくさいので実装しない
-
-        res_del_exe_statement = rdsData.execute_statement(
-                            resourceArn = cluster_arn,
-                            secretArn = secret_arn,
-                            database = database_name,
-                            sql = "delete from FamousQoute where id = :id and user_id = :user_id",
-                            parameters = [
-                                {'name': 'id', 'value': { 'longValue': id }},
-                                {'name': 'user_id', 'value': { 'longValue': user_id }},
-                            ]
-                            )
-
-
-
-        # 削除されたかわからないのでSELECT
-        res_sel_exe_statement = rdsData.execute_statement(
-                            resourceArn = cluster_arn,
-                            secretArn = secret_arn,
-                            database = database_name,
-                            sql = "select * from FamousQoute where id = :id and user_id = :user_id",
-                            parameters = [
-                                {'name': 'id', 'value': { 'longValue': id }},
-                                {'name': 'user_id', 'value': { 'longValue': user_id }},
-                            ]
-                            )
-
-        print(res_sel_exe_statement['records'])
-
-        # 0件以外の場合はエラー
-        if len(res_sel_exe_statement['records']) != 0:
-            #TODO:ロールバック処理
-            raise
-
-
-        print("↓commit_transaction")
-        print (transaction_id)
-        commit_result = rdsData.commit_transaction(
-                            resourceArn = cluster_arn,
-                            transactionId = transaction_id,
-                            secretArn = secret_arn,
-                            )
-        if commit_result['transactionStatus'] != 'Transaction Committed':
-            #TODO:ロールバック処理
-            raise
-
-        message = f'id:{id} of user_id:{user_id} is deleted'
-
-        print(commit_result)
-
-        return message
-
-
     # main
     httpMethod = event.get('httpMethod') #httpMethod取得
 
