@@ -5,6 +5,7 @@ rdsData = boto3.client('rds-data')
 cluster_arn = 'arn:aws:rds:ap-northeast-1:398086303497:cluster:meigen-share-db'
 secret_arn = 'arn:aws:secretsmanager:ap-northeast-1:398086303497:secret:rds-db-credentials/cluster-WTXA7NF2XW2GIZC6UHOO2GAE3A/admin-nstzA9'
 database_name = 'meigen'
+schema_name   = 'meigen'
 
 # AuroraServerlessへのsql実行メソッド
 def rds_exe_statement(exe_sql, param = [],tran_id = ""):
@@ -17,6 +18,21 @@ def rds_exe_statement(exe_sql, param = [],tran_id = ""):
                     transactionId = tran_id)
     print() # パラメータのデバッグ
     return rds_response
+
+def rds_begin_transaction():
+    return rdsData.begin_transaction(
+                        database = database_name,
+                        resourceArn = cluster_arn,
+                        schema = schema_name,
+                        secretArn = secret_arn,
+                        )
+
+def rds_commit_transaction(tran_id):
+    return rdsData.commit_transaction(
+                        resourceArn = cluster_arn,
+                        transactionId = tran_id,
+                        secretArn = secret_arn,
+                        )
 
 # GET
 def get_method(event):
@@ -41,67 +57,52 @@ def get_method(event):
     message = exe_statement_response['records']
     return message
 
+# POST
+def post_method(event):
+    body = event.get('body') # 更新パラメータ取得
+    if body == None:
+        raise # "パラメータがないならばエラー"
+
+    body_load = json.loads(body)
+    if body_load == None:
+        raise # "パラメータがないならばエラー"
+    if not 'user_id' in body_load or not 'content' in body_load:
+        raise # "更新パラメータがないならばエラー"
+
+    user_id = ""
+    content = ""
+    try:
+        user_id = int(body_load['user_id'])
+        content = str(body_load['content'])
+    except:
+        raise TypeError('param type error')
+
+    rds_transaction_info = rds_begin_transaction()
+    transaction_id =  rds_transaction_info['transactionId']
+
+    sql = "insert into FamousQoute  (user_id,content) values (:user_id, :content)"
+    param = [ {'name': 'user_id', 'value': { 'longValue': user_id }},
+              {'name': 'content', 'value': { 'stringValue': content }},]
+    exe_statement_response = rds_exe_statement(exe_sql = sql,
+                                               param = param,
+                                               tran_id = transaction_id)
+
+    print (f"transaction_id:{rds_transaction_info['transactionId']}") # debug
+
+    commit_result = rds_commit_transaction(tran_id = transaction_id)
+
+    if commit_result['transactionStatus'] != 'Transaction Committed':
+        #TODO:ロールバック処理
+        raise
+
+    print(commit_result)
+    print(exe_statement_response)
+
+    message = exe_statement_response['generatedFields'] # 新規付番されたIDを返す
+    return message
+
+
 def lambda_handler(event, context):
-    # POST
-    def post_method():
-        body = event.get('body') # 更新パラメータ取得
-        if body == None:
-            raise # "パラメータがないならばエラー"
-
-        body_load = json.loads(body)
-        print(body_load)
-        print('user_id' in body_load)
-
-        if body_load == None:
-            raise # "パラメータがないならばエラー"
-        if not 'user_id' in body_load or not 'content' in body_load:
-            raise # "パラメータがないならばエラー"
-
-        user_id = ""
-        content = ""
-        try:
-            user_id = body_load['user_id']
-            content = str(body_load['content'])
-        except:
-            raise TypeError('param type error')
-
-
-        res_transaction = rdsData.begin_transaction(
-                            database = 'meigen',
-                            resourceArn = cluster_arn,
-                            schema = 'meigen',
-                            secretArn = secret_arn,
-                            )
-        transaction_id = res_transaction['transactionId']
-
-        res_exe_statement = rdsData.execute_statement(
-                            resourceArn = cluster_arn,
-                            secretArn = secret_arn,
-                            database = database_name,
-                            sql = "insert into FamousQoute  (user_id,content) values (:user_id, :content)",
-                            parameters = [
-                                {'name': 'user_id', 'value': { 'longValue': user_id }},
-                                {'name': 'content', 'value': { 'stringValue': content }},
-                            ]
-                            )
-        print("↓commit_transaction")
-        print (transaction_id)
-        commit_result = rdsData.commit_transaction(
-                            resourceArn = cluster_arn,
-                            transactionId = transaction_id,
-                            secretArn = secret_arn,
-                            )
-        if commit_result['transactionStatus'] != 'Transaction Committed':
-            #TODO:ロールバック処理
-            raise
-
-        print(commit_result)
-        print(res_exe_statement)
-
-        message = res_exe_statement['generatedFields']
-        return message
-
-
     def patch_method():
         message = ""
         body = event.get('body') # 更新パラメータ取得
