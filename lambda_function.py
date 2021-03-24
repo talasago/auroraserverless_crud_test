@@ -1,11 +1,12 @@
 import json
+import os
 import boto3
 
-rdsData = boto3.client('rds-data')
-cluster_arn = 'arn:aws:rds:ap-northeast-1:398086303497:cluster:meigen-share-db'
-secret_arn = 'arn:aws:secretsmanager:ap-northeast-1:398086303497:secret:rds-db-credentials/cluster-WTXA7NF2XW2GIZC6UHOO2GAE3A/admin-nstzA9'
-database_name = 'meigen'
-schema_name   = 'meigen'
+rdsData       = boto3.client('rds-data')
+cluster_arn   = os.environ['CLUSTER_ARN']
+secret_arn    = os.environ['SECRET_ARN']
+database_name = os.environ['DATABASE_NAME']
+schema_name   = os.environ['SCHEMA_NAME']
 
 # AuroraServerlessへのsql実行メソッド
 def rds_exe_statement(exe_sql, param = [],tran_id = ""):
@@ -39,7 +40,7 @@ def get_method(event):
 
     # クエリパラメータがない場合、クエリパラメータ(id)がない場合
     if queryParam == None or queryParam.get('id') == None:
-        sql =  "select * from FamousQoute"
+        sql =  f"select * from {schema_name}.crud_test;"
         exe_statement_response = rds_exe_statement(exe_sql = sql)
     # クエリパラメータ(id)がある場合
     else:
@@ -47,7 +48,7 @@ def get_method(event):
             id = int(queryParam.get('id'))
         except:
             raise TypeError('id is type error')
-        sql =  "select * from FamousQoute where id = :id"
+        sql =  f"select * from {schema_name}.crud_test where id = :id;"
         param = [{'name': 'id', 'value': { 'longValue': id }}]
         exe_statement_response = rds_exe_statement(exe_sql = sql, param = param)
 
@@ -62,13 +63,11 @@ def post_method(event):
     body_load = json.loads(body)
     if body_load == None:
         raise # "パラメータがないならばエラー"
-    if not 'user_id' in body_load or not 'content' in body_load:
+    if not 'content' in body_load:
         raise # "更新パラメータがないならばエラー"
 
-    user_id = ""
     content = ""
     try:
-        user_id = int(body_load['user_id'])
         content = str(body_load['content'])
     except:
         raise TypeError('param type error')
@@ -76,9 +75,8 @@ def post_method(event):
     rds_transaction_info = rds_begin_transaction()
     transaction_id = rds_transaction_info['transactionId']
 
-    sql = "insert into FamousQoute  (user_id,content) values (:user_id, :content)"
-    param = [ {'name': 'user_id', 'value': { 'longValue': user_id }},
-              {'name': 'content', 'value': { 'stringValue': content }},]
+    sql = f"insert into {schema_name}.crud_test (content) values (:content);"
+    param = [{'name': 'content', 'value': { 'stringValue': content }},]
     exe_statement_response = rds_exe_statement(exe_sql = sql,
                                                param = param,
                                                tran_id = transaction_id)
@@ -106,15 +104,13 @@ def patch_method(event):
 
     if body_load == None:
         raise # "パラメータがないならばエラー"
-    if not 'id' in body_load or not 'user_id' in body_load or not 'content' in body_load:
+    if not 'id' in body_load or not 'content' in body_load:
         raise # "パラメータがないならばエラー"
 
     id = ""
-    user_id = ""
     content = ""
     try:
         id      = int(body_load['id'])
-        user_id = int(body_load['user_id'])
         content = str(body_load['content'])
     except:
         raise TypeError('param type error')
@@ -122,9 +118,8 @@ def patch_method(event):
     rds_transaction_info = rds_begin_transaction()
     transaction_id = rds_transaction_info['transactionId']
 
-    sql = "update FamousQoute set content = :content where id = :id and user_id = :user_id"
+    sql = f"update {schema_name}.crud_test set content = :content where id = :id;"
     param = [ {'name': 'id', 'value': { 'longValue': id }},
-              {'name': 'user_id', 'value': { 'longValue': user_id }},
               {'name': 'content', 'value': { 'stringValue': content }},
     ]
     exe_statement_response = rds_exe_statement(exe_sql = sql,
@@ -159,14 +154,12 @@ def delete_method(event):
     body_load = json.loads(body)
     if body_load == None:
         raise # "パラメータがないならばエラー"
-    if not 'id' in body_load or not 'user_id' in body_load:
+    if not 'id' in body_load:
         raise # "パラメータがないならばエラー"
 
     id = ""
-    user_id = ""
     try:
         id      = int(body_load['id'])
-        user_id = int(body_load['user_id'])
     except:
         raise TypeError('param type error')
 
@@ -174,16 +167,16 @@ def delete_method(event):
     transaction_id = rds_transaction_info['transactionId']
 
     # 元々データがない場合もエラーとならないけどめんどくさいので実装しない
-    del_sql = "delete from FamousQoute where id = :id and user_id = :user_id"
+    del_sql = f"delete from {schema_name}.crud_test where id = :id;"
     param = [{'name': 'id', 'value': { 'longValue': id }},
-             {'name': 'user_id', 'value': { 'longValue': user_id }},
     ]
+
     del_exe_statement_response = rds_exe_statement(exe_sql = del_sql,
                                                    param = param,
                                                    tran_id = transaction_id)
 
     # 削除されたかわからないのでSELECT
-    sel_sql = "select * from FamousQoute where id = :id and user_id = :user_id"
+    sel_sql = f"select * from {schema_name}.crud_test where id = :id"
     sel_exe_statement_responce = rds_exe_statement(exe_sql = sel_sql,
                                                    param = param,
                                                    tran_id = transaction_id)
@@ -202,12 +195,12 @@ def delete_method(event):
         #TODO:ロールバック処理
         raise
 
-    message = f'id:{id} of user_id:{user_id} is deleted' # 削除したキーを表示。
+    message = f'id:{id} is deleted' # 削除したキーを表示。
 
     return message
 
 
-def lambda_handler(event, context):
+def handler(event, context):
     # main
     httpMethod = event.get('httpMethod') #httpMethod取得
 
