@@ -13,7 +13,6 @@ aws rds-data execute-statement \
     --sql "create database ${schema_name}" \
     --profile ${profile}  > ./log/create_mysql_database.json
 
-
 aws rds-data execute-statement \
     --resource-arn "${db_cluster_arn}" \
     --secret-arn "${secret_arn}" \

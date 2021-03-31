@@ -35,10 +35,10 @@ def rds_commit_transaction(tran_id):
 
 def get_method(event):
     queryParam = event.get('queryStringParameters') # クエリパラメータ取得
-    print(queryParam) # デバッグ用
+    print(queryParam)
     exe_statement_response = ""
 
-    # クエリパラメータがない場合、クエリパラメータ(id)がない場合
+    # ククエリパラメータ(id)がない場合
     if queryParam == None or queryParam.get('id') == None:
         sql =  f"select * from {schema_name}.crud_test;"
         exe_statement_response = rds_exe_statement(exe_sql = sql)
@@ -57,14 +57,17 @@ def get_method(event):
 
 def post_method(event):
     body = event.get('body') # 更新パラメータ取得
-    if body == None:
-        raise # "パラメータがないならばエラー"
 
+    # パラメータがないならばエラー
+    if body == None:
+        raise
+    # パラメータがないならばエラー
     body_load = json.loads(body)
     if body_load == None:
-        raise # "パラメータがないならばエラー"
+        raise
+    # 更新パラメータがないならばエラー
     if not 'content' in body_load:
-        raise # "更新パラメータがないならばエラー"
+        raise
 
     content = ""
     try:
@@ -81,7 +84,7 @@ def post_method(event):
                                                param = param,
                                                tran_id = transaction_id)
 
-    print (f"transaction_id:{rds_transaction_info['transactionId']}") # debug
+    print(f"transaction_id:{rds_transaction_info['transactionId']}")
 
     commit_result = rds_commit_transaction(tran_id = transaction_id)
 
@@ -92,20 +95,25 @@ def post_method(event):
         #TODO:ロールバック処理
         raise
 
-    message = exe_statement_response['generatedFields'] # 新規付番されたIDを返す
+    # 新規付番されたIDを返す
+    message = exe_statement_response['generatedFields']
     return message
 
 def patch_method(event):
     body = event.get('body') # 更新パラメータ取得
+
+    # パラメータがないならばエラー
     if body == None:
-         raise # "パラメータがないならばエラー"
+         raise
 
     body_load = json.loads(body)
 
+    # パラメータがないならばエラー
     if body_load == None:
-        raise # "パラメータがないならばエラー"
+        raise
+    # 更新パラメータがないならばエラー
     if not 'id' in body_load or not 'content' in body_load:
-        raise # "パラメータがないならばエラー"
+        raise
 
     id = ""
     content = ""
@@ -126,7 +134,7 @@ def patch_method(event):
                                                param = param,
                                                tran_id = transaction_id)
 
-    # 1件以上更新されるのはerrorとすべき
+    # 1件以上更新されるのはerrorとする
     if exe_statement_response['numberOfRecordsUpdated'] != 1:
         #TODO:ロールバック処理
         raise
@@ -148,18 +156,21 @@ def patch_method(event):
 
 def delete_method(event):
     body = event.get('body') # 更新パラメータ取得
+    # パラメータがないならばエラー
     if body == None:
-         raise # "パラメータがないならばエラー"
+         raise
 
     body_load = json.loads(body)
+    # パラメータがないならばエラー
     if body_load == None:
-        raise # "パラメータがないならばエラー"
+        raise
+    # idパラメータがないならばエラー
     if not 'id' in body_load:
-        raise # "パラメータがないならばエラー"
+        raise
 
     id = ""
     try:
-        id      = int(body_load['id'])
+        id = int(body_load['id'])
     except:
         raise TypeError('param type error')
 
@@ -181,7 +192,7 @@ def delete_method(event):
                                                    param = param,
                                                    tran_id = transaction_id)
 
-    # 0件以外の場合はエラー
+    # 更新件数が0件以外の場合はエラー
     if len(sel_exe_statement_responce['records']) != 0:
         #TODO:ロールバック処理
         raise
@@ -196,29 +207,25 @@ def delete_method(event):
         raise
 
     message = f'id:{id} is deleted' # 削除したキーを表示。
-
     return message
 
 
 def handler(event, context):
-    # main
-    httpMethod = event.get('httpMethod') #httpMethod取得
+    httpMethod = event.get('httpMethod')
 
-    # デバッグ用
     print(event)
     print(httpMethod)
 
-    # リクエストに応じて振り分け
     if httpMethod == None:
         return True
 
+    # リクエストに応じて振り分け
     http_method_map = {
         'GET'  : get_method,
         'POST' : post_method,
         'PATCH': patch_method,
         'DELETE': delete_method
     }
-
 
     res_message = ""
     try:
